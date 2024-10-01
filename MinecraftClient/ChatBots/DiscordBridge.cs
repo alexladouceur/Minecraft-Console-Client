@@ -31,6 +31,8 @@ namespace MinecraftClient.ChatBots
 
         private DiscordClient? discordBotClient;
         private DiscordChannel? discordChannel;
+        private DiscordChannel? discordReportChannel;
+        private DiscordChannel? discordStaffChannel;
         private BridgeDirection bridgeDirection = BridgeDirection.Both;
 
         public static Configs Config = new();
@@ -46,11 +48,20 @@ namespace MinecraftClient.ChatBots
             [TomlInlineComment("$ChatBot.DiscordBridge.Token$")]
             public string Token = "your bot token here";
 
+            [TomlInlineComment("$ChatBot.DiscordBridge.EnabledGlobalMsg$")]
+            public bool EnabledGlobalMsg = false;
+
             [TomlInlineComment("$ChatBot.DiscordBridge.GuildId$")]
             public ulong GuildId = 1018553894831403028L;
 
             [TomlInlineComment("$ChatBot.DiscordBridge.ChannelId$")]
             public ulong ChannelId = 1018565295654326364L;
+
+            [TomlInlineComment("$ChatBot.DiscordBridge.ReportChannelId$")]
+            public ulong ReportChannelId = 1018565295654326364L;
+
+            [TomlInlineComment("$ChatBot.DiscordBridge.StaffChannelId$")]
+            public ulong StaffChannelId = 1018565295654326364L;
 
             [TomlInlineComment("$ChatBot.DiscordBridge.OwnersIds$")]
             public ulong[] OwnersIds = new[] { 978757810781323276UL };
@@ -227,9 +238,56 @@ namespace MinecraftClient.ChatBots
             if (!CanSendMessages() || string.IsNullOrEmpty(message))
                 return;
 
+            string staffPrefix = "[S]";
+            string filteredPrefix = "[Filtered]";
+            string punishPrefix = "(Silent)";
+            string punishPrefix2 = "✘";
+
+            string mmcIgnore1 = "[MMC]";
+            string mmcIgnore2 = "(Join)";
+            string mmcIgnore3 = "Tournament";
+            string mmcIgnore4 = "●";
+            string mmcIgnore5 = "(CLICK TO VIEW)";
+
+            if (message.Contains("`")) {
+                message = message.Replace("`", "");
+            }
+
+            string newMessage = "`" + message + "`";
+            string filteredMessage = "<:f1:1287809964357980210><:f2:1287809962902290474><:f3:1287809962076147783><:f4:1287809961052606507><:f5:1287809959903363082>" + newMessage;
+            string reportMessage = "<:r1:1287865656632410112><:r2:1287865821909225493><:r3:1287865653063323740><:r4:1287865820831285360>" + newMessage;
+            string staffMessage = "<:ss1:1287865639926628402><:ss2:1287865638664016016>" + newMessage;
+            string punishMessage = "<:p1:1287865644330516582><:p2:1287865642896199742><:p3:1287865641834905621><:p4:1287865640807567361> " + newMessage;
+
             try
             {
-                discordBotClient!.SendMessageAsync(discordChannel, message).Wait(Config.Message_Send_Timeout * 1000);
+                if (message.StartsWith(staffPrefix) && !Config.EnabledGlobalMsg) {
+                    return;
+                }
+
+                if (message.StartsWith(mmcIgnore1) || message.Contains(mmcIgnore2) || message.StartsWith(mmcIgnore3) || message.StartsWith(mmcIgnore4) || message.Contains(mmcIgnore5)) {
+                    return;
+                }
+
+                if (message.StartsWith(staffPrefix)) { // Staff & Report Messages
+                    reportMessage = reportMessage.Replace(staffPrefix + " ", "");
+                    staffMessage = staffMessage.Replace(staffPrefix + " ", "");
+                    if (message.Contains("has reported")) {
+                        discordBotClient!.SendMessageAsync(discordReportChannel, reportMessage).Wait(Config.Message_Send_Timeout * 1000);
+                    } else {
+                        discordBotClient!.SendMessageAsync(discordStaffChannel, staffMessage).Wait(Config.Message_Send_Timeout * 1000);
+                    }
+                }
+                else if (message.StartsWith(punishPrefix) || message.StartsWith(punishPrefix2)) { // Punishments
+                    discordBotClient!.SendMessageAsync(discordChannel, punishMessage).Wait(Config.Message_Send_Timeout * 1000);
+                }
+                else if (message.StartsWith(filteredPrefix)) { // Filtered
+                    filteredMessage = filteredMessage.Replace(filteredPrefix + " ", "");
+                    discordBotClient!.SendMessageAsync(discordChannel, filteredMessage).Wait(Config.Message_Send_Timeout * 1000);
+                }
+                else { // Anything else
+                    discordBotClient!.SendMessageAsync(discordChannel, newMessage).Wait(Config.Message_Send_Timeout * 1000);
+                }
             }
             catch (Exception e)
             {
@@ -306,7 +364,7 @@ namespace MinecraftClient.ChatBots
 
         private bool CanSendMessages()
         {
-            return discordBotClient != null && discordChannel != null && bridgeDirection != BridgeDirection.Minecraft;
+            return discordBotClient != null && discordChannel != null && discordReportChannel != null && discordStaffChannel != null && bridgeDirection != BridgeDirection.Minecraft;
         }
 
         async Task MainAsync()
@@ -350,6 +408,8 @@ namespace MinecraftClient.ChatBots
                 try
                 {
                     discordChannel = await discordBotClient.GetChannelAsync(Config.ChannelId);
+                    discordReportChannel = await discordBotClient.GetChannelAsync(Config.ReportChannelId);
+                    discordStaffChannel = await discordBotClient.GetChannelAsync(Config.StaffChannelId);
                 }
                 catch (Exception e)
                 {
@@ -369,10 +429,13 @@ namespace MinecraftClient.ChatBots
                     if (e.Guild.Id != Config.GuildId)
                         return;
 
-                    if (e.Channel.Id != Config.ChannelId)
+                    if (e.Author.IsBot)
                         return;
 
-                    if (!Config.OwnersIds.Contains(e.Author.Id))
+                    if (e.Channel.Id != Config.StaffChannelId)
+                        return;
+
+                    if (!Config.EnabledGlobalMsg)
                         return;
 
                     string message = e.Message.Content.Trim();
@@ -386,19 +449,35 @@ namespace MinecraftClient.ChatBots
                             return;
                     }
 
-                    if (message.StartsWith("."))
+                    if (!Config.OwnersIds.Contains(e.Author.Id) || !message.StartsWith(";"))
                     {
-                        message = message[1..];
-                        await e.Message.CreateReactionAsync(DiscordEmoji.FromName(discordBotClient, ":gear:"));
+                        if (message.Contains("`")) {
+                            message = message.Replace("`", "");
+                        }
 
-                        CmdResult result = new();
-                        PerformInternalCommand(message, ref result);
+                        string displayName = e.Author.Username;
 
-                        await e.Message.DeleteOwnReactionAsync(DiscordEmoji.FromName(discordBotClient, ":gear:"));
-                        await e.Message.CreateReactionAsync(DiscordEmoji.FromName(discordBotClient, ":white_check_mark:"));
-                        await e.Message.RespondAsync($"{Translations.bot_DiscordBridge_command_executed}:\n```{result}```");
+
+                        SendText("/s (" + displayName + ") " + message);
                     }
-                    else SendText(message);
+                    else {
+                        if (message.StartsWith(";")) {
+                            message = message.Replace(";", "");
+                        }
+                        if (message.StartsWith("."))
+                        {
+                            message = message[1..];
+                            await e.Message.CreateReactionAsync(DiscordEmoji.FromName(discordBotClient, ":gear:"));
+
+                            CmdResult result = new();
+                            PerformInternalCommand(message, ref result);
+
+                            await e.Message.DeleteOwnReactionAsync(DiscordEmoji.FromName(discordBotClient, ":gear:"));
+                            await e.Message.CreateReactionAsync(DiscordEmoji.FromName(discordBotClient, ":white_check_mark:"));
+                            await e.Message.RespondAsync($"{Translations.bot_DiscordBridge_command_executed}:\n```{result}```");
+                        }
+                        else SendText(message);
+                    }
                 };
 
                 discordBotClient.ComponentInteractionCreated += async (s, e) =>

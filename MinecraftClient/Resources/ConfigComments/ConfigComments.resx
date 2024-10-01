@@ -372,6 +372,12 @@ To send a message, simply type it out and hit enter.</value>
   <data name="ChatBot.DiscordBridge.ChannelId" xml:space="preserve">
     <value>The ID of a channel where you want to interact with the MCC using the bot.</value>
   </data>
+  <data name="ChatBot.DiscordBridge.ReportChannelId" xml:space="preserve">
+    <value>The ID of a channel where you want to interact with the MCC using the bot.</value>
+  </data>
+  <data name="ChatBot.DiscordBridge.StaffChannelId" xml:space="preserve">
+    <value>The ID of a channel where you want to interact with the MCC using the bot.</value>
+  </data>
   <data name="ChatBot.DiscordBridge.Formats" xml:space="preserve">
     <value>Message formats
 Words wrapped with { and } are going to be replaced during the code execution, do not change them!
@@ -389,6 +395,9 @@ For Discord message formatting, check the following: https://mccteam.github.io/r
   </data>
   <data name="ChatBot.DiscordBridge.Token" xml:space="preserve">
     <value>Your Discord Bot token.</value>
+  </data>
+  <data name="ChatBot.DiscordBridge.EnabledGlobalMsg" xml:space="preserve">
+    <value>Enabled Global Message.</value>
   </data>
   <data name="ChatBot.Farmer" xml:space="preserve">
     <value>Automatically farms crops for you (plants, breaks and bonemeals them).
